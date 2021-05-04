@@ -7132,6 +7132,9 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu, int sy
 			/* Always use prev_cpu as a candidate. */
 			if (!latency_sensitive && cpu == prev_cpu) {
 				prev_delta = compute_energy(p, prev_cpu, pd);
+				/* CPU utilization has changed */
+				if (prev_delta < base_energy_pd)
+					goto unlock_prev;
 				prev_delta -= base_energy_pd;
 				best_delta = min(best_delta, prev_delta);
 			}
@@ -7173,6 +7176,9 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu, int sy
 		if (!latency_sensitive && max_spare_cap_cpu >= 0 &&
 						max_spare_cap_cpu != prev_cpu) {
 			cur_delta = compute_energy(p, max_spare_cap_cpu, pd);
+			/* CPU utilization has changed */
+			if (cur_delta < base_energy_pd)
+				goto unlock_prev;
 			cur_delta -= base_energy_pd;
 			if (cur_delta < best_delta) {
 				best_delta = cur_delta;
@@ -7195,6 +7201,11 @@ unlock:
 
 	if ((prev_delta - best_delta) > ((prev_delta + base_energy) >> 4))
 		return best_energy_cpu;
+
+	return prev_cpu;
+
+unlock_prev:
+	rcu_read_unlock();
 
 	return prev_cpu;
 
