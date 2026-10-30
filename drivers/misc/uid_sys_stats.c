@@ -24,6 +24,7 @@
 #include <linux/proc_fs.h>
 #include <linux/profile.h>
 #include <linux/sched/cputime.h>
+#include <linux/sched/user.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
@@ -192,6 +193,15 @@ static struct uid_entry *find_or_register_uid(uid_t uid)
 	return uid_entry;
 }
 
+static bool uid_has_tasks(struct user_namespace *user_ns, uid_t uid)
+{
+	struct user_struct *user = find_user(make_kuid(user_ns, uid));
+	bool ret = user && atomic_read(&user->processes);
+
+	free_uid(user);
+	return ret;
+}
+
 static void calc_uid_cputime(struct uid_entry *uid_entry,
 			u64 *total_utime, u64 *total_stime)
 {
@@ -199,6 +209,9 @@ static void calc_uid_cputime(struct uid_entry *uid_entry,
 	struct task_struct *p, *t;
 	u64 utime, stime;
 	uid_t uid;
+
+	if (!uid_has_tasks(user_ns, uid_entry->uid))
+		return;
 
 	rcu_read_lock();
 	for_each_process(p) {
@@ -338,6 +351,9 @@ static void update_io_stats_uid(struct uid_entry *uid_entry)
 
 	memset(&io, 0, sizeof(struct io_stats));
 
+	if (!uid_has_tasks(user_ns, uid_entry->uid))
+		goto out;
+
 	rcu_read_lock();
 	for_each_process(p) {
 		uid_t uid = from_kuid_munged(user_ns, task_uid(p));
@@ -358,6 +374,7 @@ static void update_io_stats_uid(struct uid_entry *uid_entry)
 	}
 	rcu_read_unlock();
 
+out:
 	compute_io_bucket_stats(&uid_entry->io[uid_entry->state], &io,
 					&uid_entry->io[UID_STATE_TOTAL_LAST],
 					&uid_entry->io[UID_STATE_DEAD_TASKS]);
