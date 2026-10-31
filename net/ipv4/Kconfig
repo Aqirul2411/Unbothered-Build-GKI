@@ -697,6 +697,16 @@ config TCP_CONG_BBR3
 	  provide a delay signal. It requires pacing, using either TCP internal
 	  pacing or the fq ("Fair Queue") pacing packet scheduler.
 
+config TCP_CONG_BBRPLUS
+	tristate "BBRplus TCP"
+	default n
+	help
+
+	  BBRplus is BBR with drain-to-target cycling, tuned by dog250 and
+	  cx9208 for low-latency traffic and sustained throughput on mobile
+	  links. It requires pacing, like BBR. Selecting it here only builds
+	  it; the default congestion control is chosen below.
+
 choice
 	prompt "Default TCP congestion control"
 	default DEFAULT_CUBIC
@@ -737,6 +747,9 @@ choice
 	config DEFAULT_BBR3
 		bool "BBR3" if TCP_CONG_BBR3=y
 
+	config DEFAULT_BBRPLUS
+		bool "BBRplus" if TCP_CONG_BBRPLUS=y
+
 	config DEFAULT_RENO
 		bool "Reno"
 endchoice
@@ -762,6 +775,7 @@ config DEFAULT_TCP_CONG
 	default "cdg" if DEFAULT_CDG
 	default "bbr" if DEFAULT_BBR
 	default "bbr3" if DEFAULT_BBR3
+	default "bbrplus" if DEFAULT_BBRPLUS
 	default "cubic"
 
 config TCP_MD5SIG
