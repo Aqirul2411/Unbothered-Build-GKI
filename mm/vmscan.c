@@ -2664,6 +2664,30 @@ DEFINE_STATIC_KEY_ARRAY_FALSE(lru_gen_caps, NR_LRU_GEN_CAPS);
 #define get_cap(cap)	static_branch_unlikely(&lru_gen_caps[cap])
 #endif
 
+/*
+ * Boot with the core capability only.
+ *
+ * Enabling MGLRU at runtime on a loaded phone is pathological: change_state()
+ * moves every page already on the LRU into the generation lists while holding
+ * pgdat->lru_lock in batches, so every other CPU that needs that lock stalls
+ * and the screen freezes. At boot the same work is trivial because the lists
+ * are nearly empty.
+ *
+ * The two page-table-walk capabilities are the invasive half - they hook
+ * walk_page_range and depend on arch plumbing that differs on a vendor tree.
+ * Leave both off here; switching them on later through
+ * /sys/kernel/mm/lru_gen/enabled only flips a static branch.
+ */
+static int __init lru_gen_core_only_at_boot(void)
+{
+#ifdef CONFIG_LRU_GEN_ENABLED
+	static_branch_disable(&lru_gen_caps[LRU_GEN_MM_WALK]);
+	static_branch_disable(&lru_gen_caps[LRU_GEN_NONLEAF_YOUNG]);
+#endif
+	return 0;
+}
+late_initcall(lru_gen_core_only_at_boot);
+
 /******************************************************************************
  *                          shorthand helpers
  ******************************************************************************/
