@@ -374,17 +374,7 @@ int watermark_boost_factor __read_mostly;
 #else
 int watermark_boost_factor __read_mostly = 15000;
 #endif
-/*
- * Unbothered: raised from 10 to 150 (of 10000, so 1.5%). Watermarks are the
- * free-memory margin kswapd keeps ahead of allocation; at 0.1% a burst can
- * outrun it and land in direct reclaim, where the task that asked for the page
- * frees pages itself before it gets one - a stall mid-scroll, not a slow page.
- * 1.5% is what the hfdem/Pandora tuning module writes on this SoC family, and
- * it is the only line of that block this kernel does not already default to
- * (swappiness 60, watermark_boost_factor 15000, proactiveness 20 are ours).
- * Runtime readback: /proc/sys/vm/watermark_scale_factor
- */
-int watermark_scale_factor = 150;
+int watermark_scale_factor = 10;
 
 /*
  * Extra memory for the system to try freeing. Used to temporarily
