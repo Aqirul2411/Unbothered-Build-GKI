@@ -356,19 +356,7 @@ static int rockchip_pd_attach_dev(struct generic_pm_domain *genpd,
 	}
 
 	i = 0;
-	while (1) {
-		clk = of_clk_get(dev->of_node, i++);
-		if (IS_ERR(clk)) {
-			error = PTR_ERR(clk);
-			if (error == -ENOENT)
-				break;
-
-			dev_err(dev, "failed to get clock %d: %d\n", i - 1,
-				error);
-			pm_clk_destroy(dev);
-			return error;
-		}
-
+	while ((clk = of_clk_get(dev->of_node, i++)) && !IS_ERR(clk)) {
 		dev_dbg(dev, "adding clock '%pC' to list of PM clocks\n", clk);
 		error = pm_clk_add_clk(dev, clk);
 		if (error) {
@@ -447,7 +435,7 @@ static int rockchip_pm_add_one_domain(struct rockchip_pmu *pmu,
 			dev_err(pmu->dev,
 				"%pOFn: failed to get clk at index %d: %d\n",
 				node, i, error);
-			goto err_put_clocks;
+			return error;
 		}
 	}
 
@@ -618,9 +606,7 @@ static int rockchip_pm_add_subdomain(struct rockchip_pmu *pmu,
 				parent_domain->name, child_domain->name);
 		}
 
-		error = rockchip_pm_add_subdomain(pmu, np);
-		if (error)
-			goto err_out;
+		rockchip_pm_add_subdomain(pmu, np);
 	}
 
 	return 0;

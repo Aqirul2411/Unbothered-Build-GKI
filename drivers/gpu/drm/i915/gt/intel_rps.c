@@ -1702,8 +1702,7 @@ static void rps_work(struct work_struct *work)
 
 out:
 	spin_lock_irq(&gt->irq_lock);
-	if (intel_rps_is_active(rps))
-		gen6_gt_pm_unmask_irq(gt, rps->pm_events);
+	gen6_gt_pm_unmask_irq(gt, rps->pm_events);
 	spin_unlock_irq(&gt->irq_lock);
 }
 

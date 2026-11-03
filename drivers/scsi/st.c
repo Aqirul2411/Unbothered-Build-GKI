@@ -3189,20 +3189,14 @@ static int set_location(struct scsi_tape *STp, unsigned int block, int partition
 	    partition >= ST_NBR_PARTITIONS)
 		return (-EINVAL);
 	if (partition != STp->partition) {
-		/*
-		 * Save the location for the partition the drive reports,
-		 * not for STp->partition: after a reset STp->partition may
-		 * not match the partition the drive is in.
-		 */
-		if (get_location(STp, &blk, &p, 1) ||
-		    p < 0 || p >= ST_NBR_PARTITIONS)
+		if (get_location(STp, &blk, &p, 1))
 			STps->last_block_valid = 0;
 		else {
-			STp->ps[p].last_block_valid = 1;
-			STp->ps[p].last_block_visited = blk;
+			STps->last_block_valid = 1;
+			STps->last_block_visited = blk;
 			DEBC_printk(STp, "Visited block %d for "
 				    "partition %d saved.\n",
-				    blk, p);
+				    blk, STp->partition);
 		}
 	}
 
@@ -4493,11 +4487,11 @@ static int st_remove(struct device *dev)
 	remove_cdevs(tpnt);
 
 	mutex_lock(&st_ref_mutex);
+	kref_put(&tpnt->kref, scsi_tape_release);
+	mutex_unlock(&st_ref_mutex);
 	spin_lock(&st_index_lock);
 	idr_remove(&st_index_idr, index);
 	spin_unlock(&st_index_lock);
-	kref_put(&tpnt->kref, scsi_tape_release);
-	mutex_unlock(&st_ref_mutex);
 	return 0;
 }
 

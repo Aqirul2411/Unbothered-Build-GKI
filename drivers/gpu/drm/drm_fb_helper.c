@@ -1802,11 +1802,11 @@ __drm_fb_helper_initial_config_and_unlock(struct drm_fb_helper *fb_helper,
 	drm_client_modeset_probe(&fb_helper->client, width, height);
 	ret = drm_fb_helper_single_fb_probe(fb_helper, bpp_sel);
 	if (ret < 0) {
-		fb_helper->preferred_bpp = bpp_sel;
-		/* modesets are probed but fb_helper->fb isn't; defer restore too */
-		fb_helper->deferred_setup = true;
-		if (ret == -EAGAIN)
+		if (ret == -EAGAIN) {
+			fb_helper->preferred_bpp = bpp_sel;
+			fb_helper->deferred_setup = true;
 			ret = 0;
+		}
 		mutex_unlock(&fb_helper->lock);
 
 		return ret;

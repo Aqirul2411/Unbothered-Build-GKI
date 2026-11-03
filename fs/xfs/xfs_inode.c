@@ -33,7 +33,6 @@
 #include "xfs_symlink.h"
 #include "xfs_trans_priv.h"
 #include "xfs_log.h"
-#include "xfs_log_priv.h"
 #include "xfs_bmap_btree.h"
 #include "xfs_reflink.h"
 
@@ -800,7 +799,7 @@ xfs_ialloc(
 	xfs_nlink_t	nlink,
 	dev_t		rdev,
 	prid_t		prid,
-	struct xfs_buf	**ialloc_context,
+	xfs_buf_t	**ialloc_context,
 	xfs_inode_t	**ipp)
 {
 	struct inode	*dir = pip ? VFS_I(pip) : NULL;
@@ -957,7 +956,7 @@ xfs_dir_ialloc(
 {
 	xfs_trans_t	*tp;
 	xfs_inode_t	*ip;
-	struct xfs_buf	*ialloc_context = NULL;
+	xfs_buf_t	*ialloc_context = NULL;
 	int		code;
 	void		*dqinfo;
 	uint		tflags;
@@ -2554,7 +2553,7 @@ retry:
 	iip = ip->i_itemp;
 	if (__xfs_iflags_test(ip, XFS_IFLUSHING)) {
 		ASSERT(!list_empty(&iip->ili_item.li_bio_list));
-		ASSERT(iip->ili_last_fields || xlog_is_shutdown(mp->m_log));
+		ASSERT(iip->ili_last_fields);
 		goto out_iunlock;
 	}
 
@@ -3614,7 +3613,7 @@ xfs_iflush_cluster(
 
 	/*
 	 * We must use the safe variant here as on shutdown xfs_iflush_abort()
-	 * will remove itself from the list.
+	 * can remove itself from the list.
 	 */
 	list_for_each_entry_safe(lip, n, &bp->b_li_list, li_bio_list) {
 		iip = (struct xfs_inode_log_item *)lip;

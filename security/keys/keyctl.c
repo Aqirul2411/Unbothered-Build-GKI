@@ -677,14 +677,12 @@ okay:
 
 	/* calculate how much information we're going to return */
 	ret = -ENOMEM;
-	down_read(&key->sem);
 	infobuf = kasprintf(GFP_KERNEL,
 			    "%s;%d;%d;%08x;",
 			    key->type->name,
 			    from_kuid_munged(current_user_ns(), key->uid),
 			    from_kgid_munged(current_user_ns(), key->gid),
 			    key->perm);
-	up_read(&key->sem);
 	if (!infobuf)
 		goto error2;
 	infolen = strlen(infobuf);
@@ -808,12 +806,8 @@ static long __keyctl_read_key(struct key *key, char *buffer, size_t buflen)
 
 	down_read(&key->sem);
 	ret = key_validate(key);
-	if (ret == 0) {
-		if (key->type->read)
-			ret = key->type->read(key, buffer, buflen);
-		else
-			ret = -EOPNOTSUPP;
-	}
+	if (ret == 0)
+		ret = key->type->read(key, buffer, buflen);
 	up_read(&key->sem);
 	return ret;
 }
@@ -867,6 +861,11 @@ long keyctl_read_key(key_serial_t keyid, char __user *buffer, size_t buflen)
 
 	/* the key is probably readable - now try to read it */
 can_read_key:
+	if (!key->type->read) {
+		ret = -EOPNOTSUPP;
+		goto key_put_out;
+	}
+
 	if (!buffer || !buflen) {
 		/* Get the key length from the read method */
 		ret = __keyctl_read_key(key, NULL, 0);

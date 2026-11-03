@@ -154,7 +154,7 @@ xfs_symlink(
 	const char		*cur_chunk;
 	int			byte_cnt;
 	int			n;
-	struct xfs_buf		*bp;
+	xfs_buf_t		*bp;
 	prid_t			prid;
 	struct xfs_dquot	*udqp = NULL;
 	struct xfs_dquot	*gdqp = NULL;
@@ -366,7 +366,7 @@ STATIC int
 xfs_inactive_symlink_rmt(
 	struct xfs_inode *ip)
 {
-	struct xfs_buf	*bp;
+	xfs_buf_t	*bp;
 	int		done;
 	int		error;
 	int		i;
