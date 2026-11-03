@@ -11860,7 +11860,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (err)
 		return err;
 
-	if (!attr.exclude_kernel || attr.text_poke) {
+	if (!attr.exclude_kernel) {
 		err = perf_allow_kernel(&attr);
 		if (err)
 			return err;

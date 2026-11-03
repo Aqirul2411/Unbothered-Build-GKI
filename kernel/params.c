@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-/*
- * Helpers for initial module or kernel cmdline parsing
- * Copyright (C) 2001 Rusty Russell.
- */
-#include <linux/ctype.h>
-#include <linux/device.h>
-#include <linux/err.h>
-#include <linux/errno.h>
+/* Helpers for initial module or kernel cmdline parsing
+   Copyright (C) 2001 Rusty Russell.
+
+*/
 #include <linux/kernel.h>
-#include <linux/kstrtox.h>
+#include <linux/string.h>
+#include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#include <linux/overflow.h>
-#include <linux/security.h>
+#include <linux/device.h>
+#include <linux/err.h>
 #include <linux/slab.h>
-#include <linux/string.h>
+#include <linux/ctype.h>
+#include <linux/security.h>
 
 #ifdef CONFIG_SYSFS
 /* Protects all built-in parameters, modules use their own param_lock */
@@ -49,7 +47,7 @@ static void *kmalloc_parameter(unsigned int size)
 {
 	struct kmalloced_param *p;
 
-	p = kmalloc(size_add(sizeof(*p), size), GFP_KERNEL);
+	p = kmalloc(sizeof(*p) + size, GFP_KERNEL);
 	if (!p)
 		return NULL;
 
@@ -265,29 +263,22 @@ EXPORT_SYMBOL_GPL(param_set_uint_minmax);
 
 int param_set_charp(const char *val, const struct kernel_param *kp)
 {
-	char *tmp;
-	size_t len, maxlen = 1024;
-
-	len = strnlen(val, maxlen + 1);
-	if (len == maxlen + 1) {
+	if (strlen(val) > 1024) {
 		pr_err("%s: string parameter too long\n", kp->name);
 		return -ENOSPC;
 	}
 
-	/*
-	 * This is a hack. We can't kmalloc() in early boot, and we
-	 * don't need to; this mangled commandline is preserved.
-	 */
-	if (slab_is_available()) {
-		tmp = kmalloc_parameter(len + 1);
-		if (!tmp)
-			return -ENOMEM;
-		memcpy(tmp, val, len + 1);
-	} else
-		tmp = (char *)val;
-
 	maybe_kfree_parameter(*(char **)kp->arg);
-	*(char **)kp->arg = tmp;
+
+	/* This is a hack.  We can't kmalloc in early boot, and we
+	 * don't need to; this mangled commandline is preserved. */
+	if (slab_is_available()) {
+		*(char **)kp->arg = kmalloc_parameter(strlen(val)+1);
+		if (!*(char **)kp->arg)
+			return -ENOMEM;
+		strcpy(*(char **)kp->arg, val);
+	} else
+		*(const char **)kp->arg = val;
 
 	return 0;
 }
@@ -319,7 +310,7 @@ int param_set_bool(const char *val, const struct kernel_param *kp)
 	if (!val) val = "1";
 
 	/* One of =[yYnN01] */
-	return kstrtobool(val, kp->arg);
+	return strtobool(val, kp->arg);
 }
 EXPORT_SYMBOL(param_set_bool);
 
@@ -520,7 +511,7 @@ int param_set_copystring(const char *val, const struct kernel_param *kp)
 {
 	const struct kparam_string *kps = kp->str;
 
-	if (strnlen(val, kps->maxlen) == kps->maxlen) {
+	if (strlen(val)+1 > kps->maxlen) {
 		pr_err("%s: string doesn't fit in %u chars.\n",
 		       kp->name, kps->maxlen-1);
 		return -ENOSPC;
@@ -751,10 +742,8 @@ void module_param_sysfs_remove(struct module *mod)
 {
 	if (mod->mkobj.mp) {
 		sysfs_remove_group(&mod->mkobj.kobj, &mod->mkobj.mp->grp);
-		/*
-		 * We are positive that no one is using any param
-		 * attrs at this point. Deallocate immediately.
-		 */
+		/* We are positive that no one is using any param
+		 * attrs at this point.  Deallocate immediately. */
 		free_module_param_attrs(&mod->mkobj);
 	}
 }
