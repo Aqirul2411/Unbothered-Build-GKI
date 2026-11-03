@@ -45,8 +45,10 @@ bool hsr_addr_is_self(struct hsr_priv *hsr, unsigned char *addr)
 
 	rcu_read_lock();
 	sn = rcu_dereference(hsr->self_node);
-	if (!sn)
+	if (!sn) {
+		WARN_ONCE(1, "HSR: No self node\n");
 		goto out;
+	}
 
 	if (ether_addr_equal(addr, sn->macaddress_A) ||
 	    ether_addr_equal(addr, sn->macaddress_B))

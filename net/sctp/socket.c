@@ -1855,7 +1855,7 @@ static int sctp_sendmsg_to_asoc(struct sctp_association *asoc,
 		if (asoc->ep->intl_enable) {
 			timeo = sock_sndtimeo(sk, 0);
 			err = sctp_wait_for_connect(asoc, &timeo);
-			if (err || sk->sk_shutdown & RCV_SHUTDOWN) {
+			if (err) {
 				err = -ESRCH;
 				goto err;
 			}

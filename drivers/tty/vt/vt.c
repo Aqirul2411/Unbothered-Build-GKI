@@ -2546,8 +2546,7 @@ static void do_con_trol(struct tty_struct *tty, struct vc_data *vc, int c)
 			csi_J(vc, 2);
 			vc->vc_video_erase_char =
 				(vc->vc_video_erase_char & 0xff00) | ' ';
-			if (con_should_update(vc))
-				do_update_region(vc, vc->vc_origin, vc->vc_screenbuf_size / 2);
+			do_update_region(vc, vc->vc_origin, vc->vc_screenbuf_size / 2);
 		}
 		return;
 	case ESsetG0:
