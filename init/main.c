@@ -1607,3 +1607,26 @@ static noinline void __init kernel_init_freeable(void)
 
 	integrity_load_keys();
 }
+
+/*
+ * DIAGNOSTIC PROBE - branch probe-l0, not for main.
+ *
+ * The merged 5.10.273 tree freezes at the POCO logo with no panic, no
+ * pstore record and no crash_history entry. The softlockup detector and the
+ * hung-task watchdog are both armed before userspace, yet neither fired, so
+ * either the stall happens before subsys_initcall(hung_task_init) or
+ * timekeeping itself is wedged.
+ *
+ * This probe panics at the first initcall level. crash_history on this phone
+ * records panics from as early as 0.69 s, so:
+ *
+ *   record appears  -> start_kernel() and the pre-SMP initcalls completed
+ *   nothing appears -> the wedge is inside start_kernel() itself
+ */
+static int __init probe_l0(void)
+{
+	pr_emerg("PROBE-L0: start_kernel complete, pure_initcalls reached\n");
+	panic("PROBE-L0");
+	return 0;
+}
+pure_initcall(probe_l0);
