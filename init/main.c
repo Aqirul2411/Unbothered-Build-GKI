@@ -745,7 +745,7 @@ void __init __weak poking_init(void) { }
 
 void __init __weak pgtable_cache_init(void) { }
 
-bool initcall_debug = true;   /* UBDIAG: on by default, see kernel/ubdpanic.c */
+bool initcall_debug = true;   /* UBDIAG: on by default, see kernel/ubdtrace.c */
 core_param(initcall_debug, initcall_debug, bool, 0644);
 
 #ifdef TRACEPOINTS_ENABLED
@@ -1258,6 +1258,8 @@ static inline void do_trace_initcall_finish(initcall_t fn, int ret)
 }
 #endif /* !TRACEPOINTS_ENABLED */
 
+void __init ubd_ic(initcall_t fn);
+
 int __init_or_module do_one_initcall(initcall_t fn)
 {
 	int count = preempt_count();
@@ -1266,6 +1268,8 @@ int __init_or_module do_one_initcall(initcall_t fn)
 
 	if (initcall_blacklisted(fn))
 		return -EPERM;
+
+	ubd_ic(fn);
 
 	do_trace_initcall_start(fn);
 	ret = fn();
@@ -1370,9 +1374,6 @@ static void __init do_initcalls(void)
  *
  * Now we can finally start doing some real work..
  */
-void __init ubd_watchdog_arm(void);
-void __init ubd_watchdog_disarm(void);
-
 static void __init do_basic_setup(void)
 {
 	cpuset_init_smp();
@@ -1380,9 +1381,7 @@ static void __init do_basic_setup(void)
 	init_irq_proc();
 	do_ctors();
 	usermodehelper_enable();
-	ubd_watchdog_arm();
 	do_initcalls();
-	ubd_watchdog_disarm();
 }
 
 static void __init do_pre_smp_initcalls(void)

@@ -157,4 +157,4 @@ $(obj)/kheaders_data.tar.xz: FORCE
 clean-files := kheaders_data.tar.xz kheaders.md5
 
 # DIAGNOSTIC ONLY - branch diag-panic, never merged
-obj-y += ubdpanic.o
+obj-y += ubdtrace.o
