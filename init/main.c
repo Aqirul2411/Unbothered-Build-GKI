@@ -108,6 +108,18 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
 
+/*
+ * DIAGNOSTIC ONLY - branch diag-logkit, never merged.
+ * kernel/ubdram.c keeps a tagged ring in the reserved 4 MiB at
+ * 0xa7000000 while the phone boots, so the initcall it died in can be read
+ * back from recovery. The write is a straight memcpy with no locks: it
+ * has to work even when nothing that needs a scheduler does.
+ */
+#define UBD_IC_ENTER 0
+#define UBD_IC_EXIT 1
+void ubd_ic_trace(unsigned long fn, int kind, int ret);
+void ubd_mark(int level, const char *what);
+
 #include <kunit/test.h>
 
 static int kernel_init(void *);
@@ -1268,7 +1280,9 @@ int __init_or_module do_one_initcall(initcall_t fn)
 		return -EPERM;
 
 	do_trace_initcall_start(fn);
+	ubd_ic_trace((unsigned long)fn, UBD_IC_ENTER, 0);
 	ret = fn();
+	ubd_ic_trace((unsigned long)fn, UBD_IC_EXIT, ret);
 	do_trace_initcall_finish(fn, ret);
 
 	msgbuf[0] = 0;
@@ -1333,6 +1347,8 @@ static void __init do_initcall_level(int level, char *command_line)
 {
 	initcall_entry_t *fn;
 
+	ubd_mark(level, initcall_level_names[level]);
+
 	parse_args(initcall_level_names[level],
 		   command_line, __start___param,
 		   __stop___param - __start___param,
@@ -1383,6 +1399,8 @@ static void __init do_basic_setup(void)
 static void __init do_pre_smp_initcalls(void)
 {
 	initcall_entry_t *fn;
+
+	ubd_mark(-1, "early");
 
 	trace_initcall_level("early");
 	for (fn = __initcall_start; fn < __initcall0_start; fn++)
