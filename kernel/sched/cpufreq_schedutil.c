@@ -783,7 +783,18 @@ static int sugov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
-	tunables->rate_limit_us = cpufreq_policy_transition_delay_us(policy);
+	/*
+	 * cpufreq_policy_transition_delay_us() is LATENCY_MULTIPLIER (1000)
+	 * times the driver's transition latency, which on this platform lands
+	 * at roughly 10 ms. That is longer than the input bursts that decide
+	 * whether a scroll feels immediate, so the governor never sees them and
+	 * the frame lands late. 1 ms keeps the ramp inside a frame without
+	 * running the governor on every wakeup: the power cost of a shorter
+	 * period is that short bursts now raise the frequency at all.
+	 */
+	tunables->rate_limit_us = min_t(unsigned int,
+					cpufreq_policy_transition_delay_us(policy),
+					1000);
 
 	policy->governor_data = sg_policy;
 	sg_policy->tunables = tunables;

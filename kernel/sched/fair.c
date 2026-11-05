@@ -107,8 +107,15 @@ unsigned int sysctl_sched_child_runs_first __read_mostly;
  * (CFS  default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
 #ifdef CONFIG_SCHED_BORE
-unsigned int sysctl_sched_wakeup_granularity			= 4000000UL;
-static unsigned int normalized_sysctl_sched_wakeup_granularity	= 4000000UL;
+/*
+ * BORE ships 4 ms here. 3 ms keeps BORE's protection against over-scheduling
+ * (it must stay well above the CFS 1 ms, or the burst discrimination stops
+ * buying anything) while cutting the worst-case wait before a woken UI thread
+ * preempts. Not lowered further: below ~2 ms the extra preemptions cost more
+ * power than the responsiveness is worth.
+ */
+unsigned int sysctl_sched_wakeup_granularity			= 3000000UL;
+static unsigned int normalized_sysctl_sched_wakeup_granularity	= 3000000UL;
 #else // CONFIG_SCHED_BORE
 unsigned int sysctl_sched_wakeup_granularity			= 1000000UL;
 static unsigned int normalized_sysctl_sched_wakeup_granularity	= 1000000UL;
