@@ -794,7 +794,7 @@ static int sugov_init(struct cpufreq_policy *policy)
 	 */
 	tunables->rate_limit_us = min_t(unsigned int,
 					cpufreq_policy_transition_delay_us(policy),
-					1000);
+					500);
 
 	policy->governor_data = sg_policy;
 	sg_policy->tunables = tunables;
