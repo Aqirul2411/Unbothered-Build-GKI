@@ -76,3 +76,10 @@ endif
 config ARCH_NEEDS_CPU_IDLE_COUPLED
 	def_bool n
 endmenu
+
+config CPU_IDLE_GOV_AEGIS
+	bool "AEGIS governor (Adaptive Energy-Gated Idle Subsystem)"
+	help
+	  An energy-ledger cpuidle governor that gates deep idle state entry on
+	  realized residency rather than heuristic prediction. Selected with the
+	  cpuidle.governor=aegis kernel command line argument.
