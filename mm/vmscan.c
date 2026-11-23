@@ -4168,6 +4168,22 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	if (!walk)
 		return;
 
+	/*
+	 * Promotion only from kswapd.
+	 *
+	 * On this phone the freeze follows the same pattern every time: unlock,
+	 * scroll, open the root manager, then stuck. That is foreground
+	 * (direct) reclaim running inside the app that is faulting, walking
+	 * page tables while holding its PTE lock. Background reclaim has the
+	 * luxury of time; a task that must return to userspace does not.
+	 *
+	 * kswapd still ages and promotes exactly as before, so hot pages are
+	 * still protected - just without the page-table walk happening inside
+	 * an app that is waiting on it.
+	 */
+	if (!current_is_kswapd())
+		return;
+
 	start = max(pvmw->address & PMD_MASK, pvmw->vma->vm_start);
 	end = min(pvmw->address | ~PMD_MASK, pvmw->vma->vm_end - 1) + 1;
 
