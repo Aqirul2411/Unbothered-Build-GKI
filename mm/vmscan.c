@@ -4149,6 +4149,25 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	/* avoid taking the LRU lock under the PTL when possible */
 	walk = current->reclaim_state ? current->reclaim_state->mm_walk : NULL;
 
+	/*
+	 * Only promote from the reclaim walk.
+	 *
+	 * Without it, both paths below take pgdat->lru_lock while the PTE lock
+	 * is held (see the lockdep_assert_held above): the activate_page() fast
+	 * path does it per page, the batch path does it around
+	 * lru_gen_update_size(). That is the PTL -> LRU order this function was
+	 * written to avoid, and on this vendor tree reclaim elsewhere takes
+	 * LRU -> PTL, so the two orders can meet.
+	 *
+	 * The symptom was a freeze the moment the phone was unlocked: faults
+	 * and reclaim running at once, at the point where the launcher faults
+	 * in its working set. Skipping the no-walk case removes the inversion
+	 * and keeps promotion where it actually ages pages, which is the rmap
+	 * walk in shrink_page_list().
+	 */
+	if (!walk)
+		return;
+
 	start = max(pvmw->address & PMD_MASK, pvmw->vma->vm_start);
 	end = min(pvmw->address | ~PMD_MASK, pvmw->vma->vm_end - 1) + 1;
 
