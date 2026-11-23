@@ -8477,6 +8477,9 @@ int watermark_scale_factor_sysctl_handler(struct ctl_table *table, int write,
 	if (rc)
 		return rc;
 
+	if (write && watermark_scale_factor < 10)
+		watermark_scale_factor = 10;
+
 	if (write)
 		setup_per_zone_wmarks();
 
