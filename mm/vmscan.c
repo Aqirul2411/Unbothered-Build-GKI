@@ -4151,21 +4151,25 @@ static bool age_lruvec(struct lruvec *lruvec, struct scan_control *sc, unsigned 
 
 /* to protect the working set of the last N jiffies */
 /*
- * One second, not zero.
+ * Upstream default, deliberately: zero.
  *
- * lru_gen_age_node() skips ageing while the oldest generation is younger than
- * this, so it is the only throttle MGLRU has on how fast a page travels from
- * "just faulted in" to "candidate for eviction". Upstream defaults to 0, which
- * is fine when the page-table walks exist: they promote hot pages before it
- * matters. On this phone the walks cannot be used - the direct-reclaim form
- * froze it at the PIN and the kswapd form froze it at the lock screen - so
- * without a floor every page ages out immediately, gets evicted and is faulted
- * straight back: measured at ~380/s idle and ~6,000/s while using Facebook or
- * TikTok, with MemAvailable down to 1.7 GB of 11.4 GB.
+ * A floor here was tried and measured, and it makes things worse. On this phone
+ * the page-table walks cannot be used (they froze it at the PIN in direct
+ * reclaim and at the lock screen from kswapd), so ageing is the only way MGLRU
+ * frees memory. Holding ageing back starves reclaim and allocations start
+ * failing while gigabytes are still free:
  *
- * Still tunable at runtime: /sys/kernel/mm/lru_gen/min_ttl_ms.
+ *   min_ttl = 0     0 OOM kills/min, ~6,000 file refaults/s in use
+ *   min_ttl = 1 s   75 OOM kills in one stretch, apps killed underneath the user
+ *   min_ttl = 5 s   7 OOM kills/min  <- the "app switch stutter"
+ *
+ * A floor is only safe when the walks exist to promote hot pages; without them
+ * it just starves the allocator. So: zero, and stock LRU is the default anyway
+ * (CONFIG_LRU_GEN_ENABLED is off), which is the configuration that was smooth.
+ *
+ * Runtime: echo N > /sys/kernel/mm/lru_gen/min_ttl_ms (ms), for experiments.
  */
-static unsigned long lru_gen_min_ttl __read_mostly = HZ;
+static unsigned long lru_gen_min_ttl __read_mostly;
 
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
