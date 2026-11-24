@@ -15,6 +15,7 @@
 #include <linux/page-flags-layout.h>
 #include <linux/workqueue.h>
 #include <linux/seqlock.h>
+#include <linux/nodemask.h>
 #include <linux/android_kabi.h>
 
 #include <asm/mmu.h>
@@ -608,7 +609,7 @@ struct mm_struct {
 			 * whether it has been used since the last time per-node
 			 * page table walkers cleared the corresponding bits.
 			 */
-			unsigned long bitmap;
+			nodemask_t nodes;
 #ifdef CONFIG_MEMCG
 			/* points to the memcg of "owner" above */
 			struct mem_cgroup *memcg;
