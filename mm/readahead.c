@@ -275,17 +275,6 @@ void do_page_cache_ra(struct readahead_control *ractl,
 		nr_to_read = end_index - index + 1;
 
 	page_cache_ra_unbounded(ractl, nr_to_read, lookahead_size);
-	if (forced && lru_gen_enabled()) {
-		struct address_space *mapping = ractl->mapping;
-		unsigned long i;
-
-		for (i = 0; i < nr_to_read; i++) {
-			struct page *page = xa_load(&mapping->i_pages, index + i);
-
-			if (page && !xa_is_value(page))
-				set_bit(PG_oem_reserved_5, &page->flags);
-		}
-	}
 }
 
 /*
