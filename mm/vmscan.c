@@ -2720,34 +2720,6 @@ DEFINE_STATIC_KEY_ARRAY_FALSE(lru_gen_caps, NR_LRU_GEN_CAPS);
 #define get_cap(cap)	static_branch_unlikely(&lru_gen_caps[cap])
 #endif
 
-/*
- * Boot with the core only, not with every capability.
- *
- * CONFIG_LRU_GEN_ENABLED turns all of them on, including LRU_GEN_MM_WALK -
- * the page-table walk that reads other processes' PTEs during reclaim. That is
- * the one capability this phone has never survived: with walks on, MGLRU froze
- * it fifteen seconds after the PIN on the 2022 backport, and inside two minutes
- * on this newer generation, with load average 1.8 and zero blocked tasks right
- * up to the last sample. With walks off the same code ran for hours.
- *
- * So the default here is the configuration with evidence behind it, and the
- * walk stays available for testing:
- *
- *   cat /sys/kernel/mm/lru_gen/enabled    -> 0x0001
- *   echo 7 > /sys/kernel/mm/lru_gen/enabled   -> adds the walk back
- *   echo 1 > /sys/kernel/mm/lru_gen/enabled   -> back to core only
- *
- * This is a deliberate deviation from upstream's default and it is written
- * down in configs/tuning.fragment as well, because a silent difference between
- * this kernel and the documentation is how the last five evenings went.
- */
-static int __init lru_gen_core_only_init(void)
-{
-	static_branch_disable(&lru_gen_caps[LRU_GEN_MM_WALK]);
-	static_branch_disable(&lru_gen_caps[LRU_GEN_NONLEAF_YOUNG]);
-	return 0;
-}
-early_initcall(lru_gen_core_only_init);
 
 /******************************************************************************
  *                          shorthand helpers
@@ -4237,6 +4209,32 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 
 	/* avoid taking the LRU lock under the PTL when possible */
 	walk = current->reclaim_state ? current->reclaim_state->mm_walk : NULL;
+
+	/*
+	 * Promote only from kswapd's reclaim walk.
+	 *
+	 * Two things are true about this function on this phone, and both are
+	 * answered by the same two lines:
+	 *
+	 * 1. Without a reclaim walk attached, it takes pgdat->lru_lock while the
+	 *    PTE lock is held (see the two paths below), which is the PTL -> LRU
+	 *    order its own comment says to avoid. kswapd always has a walk, so
+	 *    refusing the no-walk case removes that inversion entirely.
+	 *
+	 * 2. In direct reclaim it walks page tables inside a task that is blocked
+	 *    waiting for its own page - the PIN-and-open-an-app case that froze
+	 *    this phone. kswapd has the luxury of time; a faulting app does not.
+	 *
+	 * What is given up: promotion during direct reclaim. What is kept: ageing,
+	 * walks and promotion in kswapd, which is where pages actually get old.
+	 * Without this the phone cannot have the walk at all (it freezes), and
+	 * without the walk MGLRU evicts hot pages and re-faults them, which is the
+	 * thrash being fixed here.
+	 */
+	if (!walk)
+		return;
+	if (!current_is_kswapd())
+		return;
 
 	start = max(pvmw->address & PMD_MASK, pvmw->vma->vm_start);
 	end = min(pvmw->address | ~PMD_MASK, pvmw->vma->vm_end - 1) + 1;
