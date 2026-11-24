@@ -1117,6 +1117,9 @@ static enum page_references page_check_references(struct page *page,
 		return PAGEREF_KEEP;
 
 	if (lru_gen_enabled()) {
+		if (test_and_clear_bit(PG_oem_reserved_5, &page->flags))
+			return PAGEREF_ACTIVATE;
+
 		if (!referenced_ptes)
 			return PAGEREF_RECLAIM;
 
@@ -1146,7 +1149,7 @@ static enum page_references page_check_references(struct page *page,
 		/*
 		 * Activate file-backed executable pages after first usage.
 		 */
-		if ((vm_flags & VM_EXEC) && !PageSwapBacked(page))
+		if (is_exec_file_page(page, vm_flags))
 			return PAGEREF_ACTIVATE;
 
 		return PAGEREF_KEEP;
@@ -1923,9 +1926,10 @@ int isolate_lru_page(struct page *page)
 		spin_lock_irq(&pgdat->lru_lock);
 		lruvec = mem_cgroup_page_lruvec(page, pgdat);
 		if (PageLRU(page)) {
+			int lru = page_lru(page);
 			get_page(page);
 			ClearPageLRU(page);
-			del_page_from_lru_list(page, lruvec);
+			del_page_from_lru_list(page, lruvec, lru);
 			ret = 0;
 		}
 		spin_unlock_irq(&pgdat->lru_lock);
@@ -2012,12 +2016,17 @@ static unsigned noinline_for_stack move_pages_to_lru(struct lruvec *lruvec,
 		lruvec = mem_cgroup_page_lruvec(page, pgdat);
 
 		SetPageLRU(page);
-		add_page_to_lru_list(page, lruvec);
-		trace_android_vh_add_page_to_lrulist(page, false, page_lru(page));
+		lru = page_lru(page);
+
+		nr_pages = thp_nr_pages(page);
+		update_lru_size(lruvec, lru, page_zonenum(page), nr_pages);
+		list_move(&page->lru, &lruvec->lists[lru]);
+		trace_android_vh_add_page_to_lrulist(page, false, lru);
 
 		if (put_page_testzero(page)) {
-			del_page_from_lru_list(page, lruvec);
-			__clear_page_lru_flags(page);
+			__ClearPageLRU(page);
+			__ClearPageActive(page);
+			del_page_from_lru_list(page, lruvec, lru);
 
 			if (unlikely(PageCompound(page))) {
 				spin_unlock_irq(&pgdat->lru_lock);
@@ -2225,7 +2234,7 @@ static void shrink_active_list(unsigned long nr_to_scan,
 			 * IO, plus JVM can create lots of anon VM_EXEC pages,
 			 * so we ignore them here.
 			 */
-			if ((vm_flags & VM_EXEC) && page_is_file_lru(page)) {
+			if (is_exec_file_page(page, vm_flags)) {
 				trace_android_vh_page_trylock_clear(page);
 				nr_rotated += thp_nr_pages(page);
 				list_add(&page->lru, &l_active);
@@ -4321,7 +4330,7 @@ static bool sort_page(struct lruvec *lruvec, struct page *page, struct scan_cont
 		success = lru_gen_del_page(lruvec, page, true);
 		VM_WARN_ON_ONCE_PAGE(!success, page);
 		SetPageUnevictable(page);
-		add_page_to_lru_list(page, lruvec);
+		add_page_to_lru_list(page, lruvec, page_lru(page));
 		__count_vm_events(UNEVICTABLE_PGCULLED, delta);
 		return true;
 	}
@@ -4331,7 +4340,7 @@ static bool sort_page(struct lruvec *lruvec, struct page *page, struct scan_cont
 		success = lru_gen_del_page(lruvec, page, true);
 		VM_WARN_ON_ONCE_PAGE(!success, page);
 		SetPageSwapBacked(page);
-		add_page_to_lru_list_tail(page, lruvec);
+		add_page_to_lru_list_tail(page, lruvec, page_lru(page));
 		return true;
 	}
 
@@ -4856,7 +4865,7 @@ static bool fill_evictable(struct lruvec *lruvec)
 			VM_WARN_ON_ONCE_PAGE(page_is_file_lru(page) != type, page);
 			VM_WARN_ON_ONCE_PAGE(page_lru_gen(page) != -1, page);
 
-			del_page_from_lru_list(page, lruvec);
+			del_page_from_lru_list(page, lruvec, page_lru(page));
 			success = lru_gen_add_page(lruvec, page, false);
 			VM_WARN_ON_ONCE(!success);
 
@@ -4887,7 +4896,7 @@ static bool drain_evictable(struct lruvec *lruvec)
 
 			success = lru_gen_del_page(lruvec, page, false);
 			VM_WARN_ON_ONCE(!success);
-			add_page_to_lru_list(page, lruvec);
+			add_page_to_lru_list(page, lruvec, page_lru(page));
 
 			if (!--remaining)
 				return false;
@@ -7364,9 +7373,12 @@ void check_move_unevictable_pages(struct pagevec *pvec)
 			continue;
 
 		if (page_evictable(page)) {
-			del_page_from_lru_list(page, lruvec);
+			enum lru_list lru = page_lru_base_type(page);
+
+			VM_BUG_ON_PAGE(PageActive(page), page);
 			ClearPageUnevictable(page);
-			add_page_to_lru_list(page, lruvec);
+			del_page_from_lru_list(page, lruvec, LRU_UNEVICTABLE);
+			add_page_to_lru_list(page, lruvec, lru);
 			pgrescued += nr_pages;
 		}
 	}

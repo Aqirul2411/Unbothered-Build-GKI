@@ -87,8 +87,9 @@ static void __page_cache_release(struct page *page)
 
 		spin_lock_irqsave(&pgdat->lru_lock, flags);
 		lruvec = mem_cgroup_page_lruvec(page, pgdat);
-		del_page_from_lru_list(page, lruvec);
-		__clear_page_lru_flags(page);
+		VM_BUG_ON_PAGE(!PageLRU(page), page);
+		__ClearPageLRU(page);
+		del_page_from_lru_list(page, lruvec, page_off_lru(page));
 		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
 	}
 	__ClearPageWaiters(page);
@@ -239,9 +240,9 @@ static void pagevec_move_tail_fn(struct page *page, struct lruvec *lruvec,
 	int *pgmoved = arg;
 
 	if (PageLRU(page) && !PageUnevictable(page)) {
-		del_page_from_lru_list(page, lruvec);
+		del_page_from_lru_list(page, lruvec, page_lru(page));
 		ClearPageActive(page);
-		add_page_to_lru_list_tail(page, lruvec);
+		add_page_to_lru_list_tail(page, lruvec, page_lru(page));
 		(*pgmoved) += thp_nr_pages(page);
 	}
 }
@@ -332,11 +333,13 @@ static void __activate_page(struct page *page, struct lruvec *lruvec,
 			    void *arg)
 {
 	if (PageLRU(page) && !PageActive(page) && !PageUnevictable(page)) {
+		int lru = page_lru_base_type(page);
 		int nr_pages = thp_nr_pages(page);
 
-		del_page_from_lru_list(page, lruvec);
+		del_page_from_lru_list(page, lruvec, lru);
 		SetPageActive(page);
-		add_page_to_lru_list(page, lruvec);
+		lru += LRU_ACTIVE;
+		add_page_to_lru_list(page, lruvec, lru);
 		trace_mm_lru_activate(page);
 
 		__count_vm_events(PGACTIVATE, nr_pages);
@@ -599,7 +602,10 @@ static void lru_deactivate_file_fn(struct page *page, struct lruvec *lruvec,
 	if (page_mapped(page))
 		return;
 
-	del_page_from_lru_list(page, lruvec);
+	active = PageActive(page);
+	lru = page_lru_base_type(page);
+
+	del_page_from_lru_list(page, lruvec, lru + active);
 	ClearPageActive(page);
 	ClearPageReferenced(page);
 
@@ -609,14 +615,14 @@ static void lru_deactivate_file_fn(struct page *page, struct lruvec *lruvec,
 		 * It can make readahead confusing.  But race window
 		 * is _really_ small and  it's non-critical problem.
 		 */
-		add_page_to_lru_list(page, lruvec);
+		add_page_to_lru_list(page, lruvec, lru);
 		SetPageReclaim(page);
 	} else {
 		/*
 		 * The page's writeback ends up during pagevec
 		 * We moves tha page into tail of inactive.
 		 */
-		add_page_to_lru_list_tail(page, lruvec);
+		add_page_to_lru_list_tail(page, lruvec, lru);
 		__count_vm_events(PGROTATED, nr_pages);
 	}
 
@@ -631,12 +637,13 @@ static void lru_deactivate_fn(struct page *page, struct lruvec *lruvec,
 			    void *arg)
 {
 	if (PageLRU(page) && !PageUnevictable(page) && (PageActive(page) || lru_gen_enabled())) {
+		int lru = page_lru_base_type(page);
 		int nr_pages = thp_nr_pages(page);
 
-		del_page_from_lru_list(page, lruvec);
+		del_page_from_lru_list(page, lruvec, lru + LRU_ACTIVE);
 		ClearPageActive(page);
 		ClearPageReferenced(page);
-		add_page_to_lru_list(page, lruvec);
+		add_page_to_lru_list(page, lruvec, lru);
 
 		__count_vm_events(PGDEACTIVATE, nr_pages);
 		__count_memcg_events(lruvec_memcg(lruvec), PGDEACTIVATE,
@@ -649,9 +656,11 @@ static void lru_lazyfree_fn(struct page *page, struct lruvec *lruvec,
 {
 	if (PageLRU(page) && PageAnon(page) && PageSwapBacked(page) &&
 	    !PageSwapCache(page) && !PageUnevictable(page)) {
+		bool active = PageActive(page);
 		int nr_pages = thp_nr_pages(page);
 
-		del_page_from_lru_list(page, lruvec);
+		del_page_from_lru_list(page, lruvec,
+				       LRU_INACTIVE_ANON + active);
 		ClearPageActive(page);
 		ClearPageReferenced(page);
 		/*
@@ -660,7 +669,7 @@ static void lru_lazyfree_fn(struct page *page, struct lruvec *lruvec,
 		 * anonymous pages
 		 */
 		ClearPageSwapBacked(page);
-		add_page_to_lru_list(page, lruvec);
+		add_page_to_lru_list(page, lruvec, LRU_INACTIVE_FILE);
 
 		__count_vm_events(PGLAZYFREE, nr_pages);
 		__count_memcg_events(lruvec_memcg(lruvec), PGLAZYFREE,
@@ -675,13 +684,16 @@ static void lru_lazyfree_movetail_fn(struct page *page, struct lruvec *lruvec,
 
 	if (PageLRU(page) && !PageUnevictable(page) && PageSwapBacked(page) &&
 		!PageSwapCache(page)) {
-		del_page_from_lru_list(page, lruvec);
+		bool active = PageActive(page);
+
+		del_page_from_lru_list(page, lruvec,
+				       LRU_INACTIVE_ANON + active);
 		ClearPageActive(page);
 		ClearPageReferenced(page);
 		if (add_to_tail && *add_to_tail)
-			add_page_to_lru_list_tail(page, lruvec);
+			add_page_to_lru_list_tail(page, lruvec, LRU_INACTIVE_FILE);
 		else
-			add_page_to_lru_list(page, lruvec);
+			add_page_to_lru_list(page, lruvec, LRU_INACTIVE_FILE);
 	}
 }
 
@@ -1099,8 +1111,9 @@ void release_pages(struct page **pages, int nr)
 			}
 
 			lruvec = mem_cgroup_page_lruvec(page, locked_pgdat);
-			del_page_from_lru_list(page, lruvec);
-			__clear_page_lru_flags(page);
+			VM_BUG_ON_PAGE(!PageLRU(page), page);
+			__ClearPageLRU(page);
+			del_page_from_lru_list(page, lruvec, page_off_lru(page));
 		}
 
 		__ClearPageWaiters(page);
@@ -1163,7 +1176,8 @@ void lru_add_page_tail(struct page *page, struct page *page_tail,
 		 * Put page_tail on the list at the correct position
 		 * so they all end up in order.
 		 */
-		add_page_to_lru_list_tail(page_tail, lruvec);
+		add_page_to_lru_list_tail(page_tail, lruvec,
+					  page_lru(page_tail));
 	}
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
@@ -1207,17 +1221,19 @@ static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec,
 	smp_mb__after_atomic();
 
 	if (page_evictable(page)) {
+		lru = page_lru(page);
 		if (was_unevictable)
 			__count_vm_events(UNEVICTABLE_PGRESCUED, nr_pages);
 	} else {
+		lru = LRU_UNEVICTABLE;
 		ClearPageActive(page);
 		SetPageUnevictable(page);
 		if (!was_unevictable)
 			__count_vm_events(UNEVICTABLE_PGCULLED, nr_pages);
 	}
 
-	add_page_to_lru_list(page, lruvec);
-	trace_mm_lru_insertion(page, page_lru(page));
+	add_page_to_lru_list(page, lruvec, lru);
+	trace_mm_lru_insertion(page, lru);
 }
 
 /*
