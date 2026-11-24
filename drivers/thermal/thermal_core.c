@@ -29,14 +29,6 @@
 #include "thermal_core.h"
 #include "thermal_hwmon.h"
 
-static bool game_mode;
-module_param(game_mode, bool, 0644);
-MODULE_PARM_DESC(game_mode, "Raise non-critical trip points while gaming");
-
-static int game_offset_mc = 6000; /* 6C dalam millicelsius */
-module_param(game_offset_mc, int, 0644);
-MODULE_PARM_DESC(game_offset_mc, "Trip offset in game mode (mC, max 10000)");
-
 static DEFINE_IDA(thermal_tz_ida);
 static DEFINE_IDA(thermal_cdev_ida);
 
@@ -446,18 +438,10 @@ static void handle_thermal_trip(struct thermal_zone_device *tz, int trip)
 			thermal_notify_tz_trip_down(tz->id, trip);
 	}
 
-	if (type == THERMAL_TRIP_CRITICAL || type == THERMAL_TRIP_HOT) {
+	if (type == THERMAL_TRIP_CRITICAL || type == THERMAL_TRIP_HOT)
 		handle_critical_trips(tz, trip, type);
-	} else if (READ_ONCE(game_mode)) {
-		int off = clamp(READ_ONCE(game_offset_mc), 0, 10000);
-		int saved = tz->temperature;
-
-		tz->temperature = saved - off;
+	else
 		handle_non_critical_trips(tz, trip);
-		tz->temperature = saved;
-	} else {
-		handle_non_critical_trips(tz, trip);
-	}
 	/*
 	 * Alright, we handled this trip successfully.
 	 * So, start monitoring again.

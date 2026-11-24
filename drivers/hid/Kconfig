@@ -722,6 +722,7 @@ config HID_MULTITOUCH
 config HID_NINTENDO
 	tristate "Nintendo Joy-Con and Pro Controller support"
 	depends on HID
+	select POWER_SUPPLY
 	help
 	Adds support for the Nintendo Switch Joy-Cons and Pro Controller.
 	All controllers support bluetooth, and the Pro Controller also supports
@@ -729,6 +730,16 @@ config HID_NINTENDO
 
 	To compile this driver as a module, choose M here: the
 	module will be called hid-nintendo.
+
+config NINTENDO_FF
+	bool "Nintendo Switch controller force feedback support"
+	depends on HID_NINTENDO
+	select INPUT_FF_MEMLESS
+	help
+	Say Y here if you have a Nintendo Switch controller and want to enable
+	force feedback support for it. This works for both joy-cons and the pro
+	controller. For the pro controller, both rumble motors can be controlled
+	individually.
 
 config HID_NTI
 	tristate "NTI keyboard adapters"
@@ -1191,6 +1202,19 @@ config HID_ALPS
 	Support for Alps I2C HID touchpads and StickPointer.
 	Say Y here if you have a Alps touchpads over i2c-hid or usbhid
 	and want support for its special functionalities.
+
+config HID_QVR
+	tristate "QVR support"
+	depends on HID
+	help
+	Say 'Y' or 'M' if you want to connect an external device to
+	stream sensor data for QVR support.
+
+	This module handles sensor data from external device and
+	writes it in to shared memory. Sensor data includes
+	temperature, accelerometer, gyroscope, magnetometer data.
+
+	If unsure, say Y.
 
 config HID_MCP2221
 	tristate "Microchip MCP2221 HID USB-to-I2C/SMbus host support"

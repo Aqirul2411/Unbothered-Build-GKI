@@ -476,6 +476,32 @@ depends on (ARCH_QCOM && OF) || COMPILE_TEST
 source "drivers/thermal/qcom/Kconfig"
 endmenu
 
+config MI_THERMAL_INTERFACE
+	tristate "xiaomi thermal control interface"
+	depends on THERMAL
+	default n
+	help
+	  This is xiaomi thermal control interface.
+
+config MI_THERMAL_MULTI_CHARGE
+	bool "enable multi charge themral interface"
+	depends on MI_THERMAL_INTERFACE
+	help
+	  Enable multi charge function in kernel, add two sysfs nodes in
+	  thermal_message.
+
+config HAVE_CHARGE_TEMP
+	bool "enable have charge temp node in thermal interface"
+	depends on MI_THERMAL_INTERFACE
+	help
+	  Enable display charge temp node in kernel, add one node in thermal_message 
+
+config HAVE_MULTI_SCREEN
+	bool "Have multi screen"
+	depends on MI_THERMAL_INTERFACE
+	help
+	  Enable register two screen in driver
+
 config ZX2967_THERMAL
 	tristate "Thermal sensors on zx2967 SoC"
 	depends on ARCH_ZX || COMPILE_TEST

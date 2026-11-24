@@ -3747,41 +3747,33 @@ static int cgroup_cpu_pressure_show(struct seq_file *seq, void *v)
 static ssize_t cgroup_pressure_write(struct kernfs_open_file *of, char *buf,
 					  size_t nbytes, enum psi_res res)
 {
-	struct cgroup_file_ctx *ctx;
+	struct cgroup_file_ctx *ctx = of->priv;
 	struct psi_trigger *new;
 	struct cgroup *cgrp;
 	struct psi_group *psi;
-	ssize_t ret = 0;
 
 	cgrp = cgroup_kn_lock_live(of->kn, false);
 	if (!cgrp)
 		return -ENODEV;
 
-	ctx = of->priv;
-	if (!ctx) {
-		ret = -ENODEV;
-		goto out_unlock;
-	}
+	cgroup_get(cgrp);
+	cgroup_kn_unlock(of->kn);
 
 	/* Allow only one trigger per file descriptor */
 	if (ctx->psi.trigger) {
-		ret = -EBUSY;
-		goto out_unlock;
+		cgroup_put(cgrp);
+		return -EBUSY;
 	}
 
 	psi = cgroup_ino(cgrp) == 1 ? &psi_system : &cgrp->psi;
 	new = psi_trigger_create(psi, buf, nbytes, res);
 	if (IS_ERR(new)) {
-		ret = PTR_ERR(new);
-		goto out_unlock;
+		cgroup_put(cgrp);
+		return PTR_ERR(new);
 	}
 
 	smp_store_release(&ctx->psi.trigger, new);
-
-out_unlock:
-	cgroup_kn_unlock(of->kn);
-	if (ret)
-		return ret;
+	cgroup_put(cgrp);
 
 	return nbytes;
 }
@@ -3902,7 +3894,6 @@ static void cgroup_file_release(struct kernfs_open_file *of)
 		cft->release(of);
 	put_cgroup_ns(ctx->ns);
 	kfree(ctx);
-	of->priv = NULL;
 }
 
 static ssize_t cgroup_file_write(struct kernfs_open_file *of, char *buf,

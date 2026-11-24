@@ -229,7 +229,6 @@ struct tcp_bbr_info {
 	__u32	bbr_min_rtt;		/* min-filtered RTT in uSec */
 	__u32	bbr_pacing_gain;	/* pacing gain shifted left 8 bits */
 	__u32	bbr_cwnd_gain;		/* cwnd gain shifted left 8 bits */
-#ifndef __GENKSYMS__
 	__u32	bbr_bw_hi_lsb;		/* lower 32 bits of bw_hi */
 	__u32	bbr_bw_hi_msb;		/* upper 32 bits of bw_hi */
 	__u32	bbr_bw_lo_lsb;		/* lower 32 bits of bw_lo */
@@ -241,7 +240,6 @@ struct tcp_bbr_info {
 	__u32	bbr_inflight_lo;	/* lower short-term data volume bound */
 	__u32	bbr_inflight_hi;	/* higher long-term data volume bound */
 	__u32	bbr_extra_acked;	/* max excess packets ACKed in epoch */
-#endif
 };
 
 /* TCP BBR congestion control bbr_phase as reported in netlink/ss stats. */

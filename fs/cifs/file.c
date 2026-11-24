@@ -747,6 +747,13 @@ cifs_reopen_file(struct cifsFileInfo *cfile, bool can_flush)
 	create_options |= cifs_open_create_options(cfile->f_flags,
 						   create_options);
 
+	/* O_SYNC also has bit for O_DSYNC so following check picks up either */
+	if (cfile->f_flags & O_SYNC)
+		create_options |= CREATE_WRITE_THROUGH;
+
+	if (cfile->f_flags & O_DIRECT)
+		create_options |= CREATE_NO_BUFFER;
+
 	if (server->ops->get_lease_key)
 		server->ops->get_lease_key(inode, &cfile->fid);
 

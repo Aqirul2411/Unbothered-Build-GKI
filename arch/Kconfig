@@ -741,8 +741,17 @@ config CFI_PERMISSIVE
 
 config CFI_FORCE_SKIP_CHECK
 	bool "Skip execution of __cfi_check function"
-	def_bool y if CLANG_VERSION >= 190100
+	def_bool y if CLANG_VERSION >= 190100 && CLANG_VERSION <= 210100
 	depends on CFI_CLANG
+
+config LLVM_POLLY
+	bool "Enable LLVM's polyhedral loop optimizer (Polly)"
+	depends on CC_IS_CLANG && $(cc-option, -mllvm -polly)
+	help
+	  This option enables LLVM's polyhedral loop optimizer known as Polly.
+	  Polly is able to optimize various loops throughout the kernel for
+	  maximum cache locality. This requires an LLVM toolchain explicitly
+	  compiled with Polly support.
 
 config HAVE_ARCH_WITHIN_STACK_FRAMES
 	bool
@@ -1198,6 +1207,14 @@ config ARCH_SPLIT_ARG64
 	help
 	   If a 32-bit architecture requires 64-bit arguments to be split into
 	   pairs of 32-bit arguments, select this option.
+
+config ARCH_HAS_NONLEAF_PMD_YOUNG
+	bool
+	help
+	  Architectures that select this option are capable of setting the
+	  accessed bit in non-leaf PMD entries when using them as part of linear
+	  address translations. Page table walkers that clear the accessed bit
+	  may use this capability to reduce their search space.
 
 source "kernel/gcov/Kconfig"
 

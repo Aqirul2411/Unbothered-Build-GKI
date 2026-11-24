@@ -42,7 +42,7 @@ static DEFINE_IDR(zram_index_idr);
 static DEFINE_MUTEX(zram_index_mutex);
 
 static int zram_major;
-static const char *default_compressor = "lzo-rle";
+static const char *default_compressor = IS_ENABLED(CONFIG_CRYPTO_LZ4) ? "lz4" : "lzo-rle";
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
@@ -1285,7 +1285,7 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
 	if (size == PAGE_SIZE) {
 		dst = kmap_atomic(page);
-		memcpy(dst, src, PAGE_SIZE);
+		copy_page(dst, src);
 		kunmap_atomic(dst);
 		ret = 0;
 	} else {
@@ -1337,6 +1337,35 @@ out:
 	return ret;
 }
 
+
+#ifdef CONFIG_ZRAM_ENTROPY
+static inline u32 ilog2_w(u64 n)
+{
+	return ilog2(n * n * n * n);
+}
+
+static inline s32 shannon_entropy(const u8 *src)
+{
+	s32 entropy_sum = 0;
+	u32 sz_base, i;
+	u16 entropy_count[256] = { 0 };
+
+	for (i = 0; i < PAGE_SIZE; ++i)
+		entropy_count[src[i]]++;
+
+	sz_base = ilog2_w(PAGE_SIZE);
+	for (i = 0; i < ARRAY_SIZE(entropy_count); ++i) {
+		if (entropy_count[i] > 0) {
+			s32 p = entropy_count[i];
+
+			entropy_sum += p * (sz_base - ilog2_w((u64)p));
+		}
+	}
+
+	return entropy_sum;
+}
+#endif
+
 static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 				u32 index, struct bio *bio)
 {
@@ -1363,7 +1392,17 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 compress_again:
 	zstrm = zcomp_stream_get(zram->comp);
 	src = kmap_atomic(page);
+
+#ifdef CONFIG_ZRAM_ENTROPY
+	/* Just save this page uncompressible */
+	if (shannon_entropy((const u8 *)src) > CONFIG_ZRAM_ENTROPY_THRESHOLD)
+		comp_len = PAGE_SIZE;
+	else
+		ret = zcomp_compress(zstrm, src, &comp_len);
+#else
 	ret = zcomp_compress(zstrm, src, &comp_len);
+#endif
+
 	kunmap_atomic(src);
 
 	if (unlikely(ret)) {

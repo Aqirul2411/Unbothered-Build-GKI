@@ -23,18 +23,17 @@
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
 #include <linux/profile.h>
+#include <linux/rtmutex.h>
 #include <linux/sched/cputime.h>
-#include <linux/sched/user.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include <linux/spinlock_types.h>
 
 #define UID_HASH_BITS	10
 #define UID_HASH_NUMS	(1 << UID_HASH_BITS)
 DECLARE_HASHTABLE(hash_table, UID_HASH_BITS);
 /* uid_lock[bkt] ensure consistency of hash_table[bkt] */
-spinlock_t uid_lock[UID_HASH_NUMS];
+static struct rt_mutex uid_lock[UID_HASH_NUMS];
 
 #define for_each_bkt(bkt) \
 	for (bkt = 0; bkt < HASH_SIZE(hash_table); bkt++)
@@ -89,7 +88,7 @@ static void init_hash_table_and_lock(void)
 
 	hash_init(hash_table);
 	for (i = 0; i < UID_HASH_NUMS; i++)
-		spin_lock_init(&uid_lock[i]);
+		rt_mutex_init(&uid_lock[i]);
 }
 
 static inline int uid_to_bkt(uid_t uid)
@@ -99,27 +98,27 @@ static inline int uid_to_bkt(uid_t uid)
 
 static inline int trylock_uid(uid_t uid)
 {
-	return spin_trylock(&uid_lock[uid_to_bkt(uid)]);
+	return rt_mutex_trylock(&uid_lock[uid_to_bkt(uid)]);
 }
 
 static inline void lock_uid(uid_t uid)
 {
-	spin_lock(&uid_lock[uid_to_bkt(uid)]);
+	rt_mutex_lock(&uid_lock[uid_to_bkt(uid)]);
 }
 
 static inline void unlock_uid(uid_t uid)
 {
-	spin_unlock(&uid_lock[uid_to_bkt(uid)]);
+	rt_mutex_unlock(&uid_lock[uid_to_bkt(uid)]);
 }
 
 static inline void lock_uid_by_bkt(u32 bkt)
 {
-	spin_lock(&uid_lock[bkt]);
+	rt_mutex_lock(&uid_lock[bkt]);
 }
 
 static inline void unlock_uid_by_bkt(u32 bkt)
 {
-	spin_unlock(&uid_lock[bkt]);
+	rt_mutex_unlock(&uid_lock[bkt]);
 }
 
 static u64 compute_write_bytes(struct task_io_accounting *ioac)
@@ -193,15 +192,6 @@ static struct uid_entry *find_or_register_uid(uid_t uid)
 	return uid_entry;
 }
 
-static bool uid_has_tasks(struct user_namespace *user_ns, uid_t uid)
-{
-	struct user_struct *user = find_user(make_kuid(user_ns, uid));
-	bool ret = user && atomic_read(&user->processes);
-
-	free_uid(user);
-	return ret;
-}
-
 static void calc_uid_cputime(struct uid_entry *uid_entry,
 			u64 *total_utime, u64 *total_stime)
 {
@@ -209,9 +199,6 @@ static void calc_uid_cputime(struct uid_entry *uid_entry,
 	struct task_struct *p, *t;
 	u64 utime, stime;
 	uid_t uid;
-
-	if (!uid_has_tasks(user_ns, uid_entry->uid))
-		return;
 
 	rcu_read_lock();
 	for_each_process(p) {
@@ -351,9 +338,6 @@ static void update_io_stats_uid(struct uid_entry *uid_entry)
 
 	memset(&io, 0, sizeof(struct io_stats));
 
-	if (!uid_has_tasks(user_ns, uid_entry->uid))
-		goto out;
-
 	rcu_read_lock();
 	for_each_process(p) {
 		uid_t uid = from_kuid_munged(user_ns, task_uid(p));
@@ -374,7 +358,6 @@ static void update_io_stats_uid(struct uid_entry *uid_entry)
 	}
 	rcu_read_unlock();
 
-out:
 	compute_io_bucket_stats(&uid_entry->io[uid_entry->state], &io,
 					&uid_entry->io[UID_STATE_TOTAL_LAST],
 					&uid_entry->io[UID_STATE_DEAD_TASKS]);

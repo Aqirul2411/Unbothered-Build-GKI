@@ -116,4 +116,14 @@ source "drivers/staging/wfx/Kconfig"
 
 source "drivers/staging/hikey9xx/Kconfig"
 
+source "drivers/staging/qcacld-3.0/Kconfig"
+
+source "drivers/staging/extend_reclaim/Kconfig"
+
+source "drivers/staging/binder_prio/Kconfig"
+
+source "drivers/staging/kshrink_slabd/Kconfig"
+
+source "drivers/staging/kshrink_lruvecd/Kconfig"
+
 endif # STAGING

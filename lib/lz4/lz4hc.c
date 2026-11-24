@@ -39,6 +39,7 @@
 
 /*===    Dependency    ===*/
 #define LZ4_HC_STATIC_LINKING_ONLY
+#include "lz4_kern.h"
 #include "lz4hc.h"
 
 /*! HEAPMODE :
@@ -69,6 +70,12 @@ typedef enum { noDictCtx, usingDictCtxHc } dictCtx_directive;
 /*===   Constants   ===*/
 #define OPTIMAL_ML (int)((ML_MASK - 1) + MINMATCH)
 #define LZ4_OPT_NUM (1 << 12)
+
+/*===   Macros   ===*/
+#undef MIN
+#undef MAX
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 /*===   Levels definition   ===*/
 typedef enum { lz4mid, lz4hc, lz4opt } lz4hc_strat_e;

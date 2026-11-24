@@ -101,29 +101,26 @@ void tcp_rate_skb_delivered(struct sock *sk, struct sk_buff *skb,
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcp_skb_cb *scb = TCP_SKB_CB(skb);
-	u64 tx_tstamp;
 
 	if (!scb->tx.delivered_mstamp)
 		return;
 
-	tx_tstamp = tcp_skb_timestamp_us(skb);
 	if (!rs->prior_delivered ||
-	    tcp_skb_sent_after(tx_tstamp, tp->first_tx_mstamp,
-			       scb->end_seq, rs->last_end_seq)) {
+	    after(scb->tx.delivered, rs->prior_delivered)) {
 		rs->prior_lost	     = scb->tx.lost;
 		rs->prior_delivered_ce  = scb->tx.delivered_ce;
 		rs->prior_delivered  = scb->tx.delivered;
 		rs->prior_mstamp     = scb->tx.delivered_mstamp;
 		rs->is_app_limited   = scb->tx.is_app_limited;
-		rs->tx_in_flight     = scb->tx.in_flight;
 		rs->is_retrans	     = scb->sacked & TCPCB_RETRANS;
-		rs->last_end_seq     = scb->end_seq;
+		rs->tx_in_flight     = scb->tx.in_flight;
 
 		/* Record send time of most recently ACKed packet: */
-		tp->first_tx_mstamp  = tx_tstamp;
+		tp->first_tx_mstamp  = tcp_skb_timestamp_us(skb);
 		/* Find the duration of the "send phase" of this window: */
-		rs->interval_us = tcp_stamp32_us_delta(tp->first_tx_mstamp,
-						     scb->tx.first_tx_mstamp);
+		rs->interval_us      = tcp_stamp32_us_delta(
+						tp->first_tx_mstamp,
+						scb->tx.first_tx_mstamp);
 
 	}
 	/* Mark off the skb delivered once it's sacked to avoid being
@@ -177,7 +174,7 @@ void tcp_rate_gen(struct sock *sk, u32 delivered, u32 lost,
 	 * longer phase.
 	 */
 	snd_us = rs->interval_us;				/* send phase */
-	ack_us = tcp_stamp_us_delta(tp->tcp_mstamp,
+	ack_us = tcp_stamp32_us_delta(tp->tcp_mstamp,
 				    rs->prior_mstamp); /* ack phase */
 	rs->interval_us = max(snd_us, ack_us);
 
@@ -222,7 +219,7 @@ void tcp_rate_check_app_limited(struct sock *sk)
 	    /* Nothing in sending host's qdisc queues or NIC tx queue. */
 	    sk_wmem_alloc_get(sk) < SKB_TRUESIZE(1) &&
 	    /* We are not limited by CWND. */
-	    tcp_packets_in_flight(tp) < tp->snd_cwnd &&
+	    tcp_packets_in_flight(tp) < tcp_snd_cwnd(tp) &&
 	    /* All lost packets have been retransmitted. */
 	    tp->lost_out <= tp->retrans_out)
 		tp->app_limited =

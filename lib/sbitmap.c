@@ -12,33 +12,16 @@
 /*
  * See if we have deferred clears that we can batch move
  */
-static inline bool sbitmap_deferred_clear(struct sbitmap *sb, int index,
-		unsigned int depth, unsigned int alloc_hint, bool wrap)
+static inline bool sbitmap_deferred_clear(struct sbitmap *sb, int index)
 {
-	unsigned long mask, val, word_mask;
+	unsigned long mask, val;
 	bool ret = false;
 	unsigned long flags;
 
 	spin_lock_irqsave(&sb->map[index].swap_lock, flags);
 
-	if (!sb->map[index].cleared) {
-		if (depth == 0)
-			goto out_unlock;
-
-		word_mask = (~0UL) >> (BITS_PER_LONG - depth);
-		/*
-		 * The current behavior is to always retry after moving
-		 * ->cleared to word, and we change it to retry in case
-		 * of any free bits. To avoid an infinite loop, we need
-		 * to take wrap & alloc_hint into account, otherwise a
-		 * soft lockup may occur.
-		 */
-		if (!wrap && alloc_hint)
-			word_mask &= ~((1UL << alloc_hint) - 1);
-
-		ret = (READ_ONCE(sb->map[index].word) & word_mask) != word_mask;
+	if (!sb->map[index].cleared)
 		goto out_unlock;
-	}
 
 	/*
 	 * First get a stable cleared mask, setting the old mask to 0.
@@ -109,7 +92,7 @@ void sbitmap_resize(struct sbitmap *sb, unsigned int depth)
 	unsigned int i;
 
 	for (i = 0; i < sb->map_nr; i++)
-		sbitmap_deferred_clear(sb, i, 0, 0, 0);
+		sbitmap_deferred_clear(sb, i);
 
 	sb->depth = depth;
 	sb->map_nr = DIV_ROUND_UP(sb->depth, bits_per_word);
@@ -164,8 +147,7 @@ static int sbitmap_find_bit_in_index(struct sbitmap *sb, int index,
 					!round_robin);
 		if (nr != -1)
 			break;
-		if (!sbitmap_deferred_clear(sb, index, sb->map[index].depth,
-					    alloc_hint, !round_robin))
+		if (!sbitmap_deferred_clear(sb, index))
 			break;
 	} while (1);
 
@@ -225,9 +207,7 @@ again:
 			break;
 		}
 
-		if (sbitmap_deferred_clear(sb, index,
-				min(sb->map[index].depth, shallow_depth),
-				SB_NR_TO_BIT(sb, alloc_hint), true))
+		if (sbitmap_deferred_clear(sb, index))
 			goto again;
 
 		/* Jump to next index. */

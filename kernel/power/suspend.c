@@ -607,28 +607,6 @@ static int enter_state(suspend_state_t state)
 	return error;
 }
 
-static unsigned int backoff_max_ms = 8000;
-module_param(backoff_max_ms, uint, 0644);
-
-/* Keep user space from retrying at once after an aborted or sub-second cycle */
-static void suspend_backoff(int error, ktime_t start)
-{
-	static struct wakeup_source *ws;
-	static unsigned int ms;
-	bool slept = !error &&
-		ktime_ms_delta(ktime_get_boottime(), start) >= MSEC_PER_SEC;
-
-	if (slept || !backoff_max_ms) {
-		ms = 0;
-		return;
-	}
-
-	ms = min(max(ms * 2, 250U), backoff_max_ms);
-	if (!ws)
-		ws = wakeup_source_register(NULL, "suspend_backoff");
-	__pm_wakeup_event(ws, ms);
-}
-
 /**
  * pm_suspend - Externally visible function for suspending the system.
  * @state: System sleep state to enter.
@@ -638,16 +616,13 @@ static void suspend_backoff(int error, ktime_t start)
  */
 int pm_suspend(suspend_state_t state)
 {
-	ktime_t start;
 	int error;
 
 	if (state <= PM_SUSPEND_ON || state >= PM_SUSPEND_MAX)
 		return -EINVAL;
 
 	pr_info("suspend entry (%s)\n", mem_sleep_labels[state]);
-	start = ktime_get_boottime();
 	error = enter_state(state);
-	suspend_backoff(error, start);
 	if (error) {
 		suspend_stats.fail++;
 		dpm_save_failed_errno(error);

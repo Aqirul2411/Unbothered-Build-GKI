@@ -60,19 +60,23 @@ config BFQ_CGROUP_DEBUG
 
 config MQ_IOSCHED_SSG
 	tristate "SamSung Generic I/O scheduler"
-	default y
+	default n
 	help
 	  SamSung Generic IO scheduler.
 
 config MQ_IOSCHED_SSG_CGROUP
 	tristate "Control Group for SamSung Generic I/O scheduler"
-	default y
+	default n
 	depends on BLK_CGROUP
 	depends on MQ_IOSCHED_SSG
 	help
 	  Control Group for SamSung Generic IO scheduler.
 
-
+config CPQ_IOSCHED
+	tristate "cpq iosched"
+	default n
+	help
+	  Command Priority Queueing i/o scheduler
 
 endmenu
 

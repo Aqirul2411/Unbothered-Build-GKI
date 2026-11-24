@@ -2366,6 +2366,7 @@ int rproc_del(struct rproc *rproc)
 	if (!rproc)
 		return -EINVAL;
 
+	/* if rproc is marked always-on, rproc_add() booted it */
 	/* TODO: make sure this works with rproc->power > 1 */
 	if (rproc->auto_boot)
 		rproc_shutdown(rproc);
@@ -2496,7 +2497,11 @@ void rproc_report_crash(struct rproc *rproc, enum rproc_crash_type type)
 	dev_err(&rproc->dev, "crash detected in %s: type %s\n",
 		rproc->name, rproc_crash_to_string(type));
 
-	queue_work(rproc_recovery_wq, &rproc->crash_handler);
+	if (rproc_recovery_wq)
+		queue_work(rproc_recovery_wq, &rproc->crash_handler);
+	else
+	/* Have a worker handle the error; ensure system is not suspended */
+		queue_work(system_freezable_wq, &rproc->crash_handler);
 }
 EXPORT_SYMBOL(rproc_report_crash);
 
@@ -2543,10 +2548,8 @@ static int __init remoteproc_init(void)
 {
 	rproc_recovery_wq = alloc_workqueue("rproc_recovery_wq",
 						WQ_UNBOUND | WQ_FREEZABLE, 0);
-	if (!rproc_recovery_wq) {
+	if (!rproc_recovery_wq)
 		pr_err("remoteproc: creation of rproc_recovery_wq failed\n");
-		return -ENOMEM;
-	}
 
 	rproc_init_sysfs();
 	rproc_init_debugfs();
@@ -2564,7 +2567,8 @@ static void __exit remoteproc_exit(void)
 	rproc_exit_panic();
 	rproc_exit_debugfs();
 	rproc_exit_sysfs();
-	destroy_workqueue(rproc_recovery_wq);
+	if (rproc_recovery_wq)
+		destroy_workqueue(rproc_recovery_wq);
 }
 module_exit(remoteproc_exit);
 

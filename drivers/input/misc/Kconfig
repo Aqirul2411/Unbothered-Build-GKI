@@ -164,6 +164,26 @@ config INPUT_PMIC8XXX_PWRKEY
 	  To compile this driver as a module, choose M here: the
 	  module will be called pmic8xxx-pwrkey.
 
+config INPUT_QPNP_POWER_ON
+	tristate "QPNP PMIC Power-on support"
+	depends on SPMI
+	help
+	  This option enables device driver support for the power-on
+	  functionality of Qualcomm Technologies, Inc. PNP PMICs.  It supports
+	  reporting the change in status of the KPDPWR_N line (connected to the
+	  power-key) as well as reset features.
+
+config INPUT_QCOM_HV_HAPTICS
+	tristate "QTI High Voltage Haptics support"
+	depends on MFD_SPMI_PMIC
+	help
+	  This option enables device driver support for the high voltage haptics
+	  peripheral found on Qualcomm Technologies, Inc. PMICs.  The high voltage
+	  haptics peripheral is capable of driving either LRA or ERM vibrators with
+	  drive voltage up to 10 V, and its 5 integrated pattern sources can be used
+	  for playing different vibration effects. To compile this driver as a module,
+	  choose M here: the module will be called qcom-hv-haptics.
+
 config INPUT_SPARCSPKR
 	tristate "SPARC Speaker support"
 	depends on PCI && SPARC64
@@ -906,6 +926,16 @@ config INPUT_PWRKEY_SYNC_PANIC
 	  Additionally, this feature prints useful info like locks, stack
 	  backtrace and currently blocked tasks to the kernel log before
 	  triggering a kernel panic.
+
+config INPUT_PWRKEY_SYNC_DEVNAME
+	bool "Listen only to the specified input device"
+	help
+	  Listen only to the specified input device; otherwise, attempt to
+	  listen to all eligible input devices.
+
+config INPUT_PWRKEY_SYNC_DEVNAME_STR
+	string "Specify the name of the power button input device"
+	depends on INPUT_PWRKEY_SYNC_DEVNAME
 
 if INPUT_PWRKEY_SYNC_PANIC
 
