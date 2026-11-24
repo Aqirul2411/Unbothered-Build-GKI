@@ -661,7 +661,7 @@ void lru_gen_migrate_mm(struct mm_struct *mm);
 static inline void lru_gen_init_mm(struct mm_struct *mm)
 {
 	INIT_LIST_HEAD(&mm->lru_gen.list);
-	mm->lru_gen.bitmap = 0;
+	nodes_clear(mm->lru_gen.nodes);
 #ifdef CONFIG_MEMCG
 	mm->lru_gen.memcg = NULL;
 #endif
@@ -674,7 +674,7 @@ static inline void lru_gen_use_mm(struct mm_struct *mm)
 	 * used since the last time it cleared the bitmap. So it might be worth
 	 * walking the page tables of this mm_struct to clear the accessed bit.
 	 */
-	WRITE_ONCE(mm->lru_gen.bitmap, -1);
+	nodes_setall(mm->lru_gen.nodes);
 }
 
 #else /* !CONFIG_LRU_GEN */
