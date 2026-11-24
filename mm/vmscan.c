@@ -2720,6 +2720,37 @@ DEFINE_STATIC_KEY_ARRAY_FALSE(lru_gen_caps, NR_LRU_GEN_CAPS);
 #define get_cap(cap)	static_branch_unlikely(&lru_gen_caps[cap])
 #endif
 
+/*
+ * Boot with the core only: the page-table walks stay off.
+ *
+ * They are the one capability this phone cannot survive, in every form that has
+ * been tried:
+ *
+ *   direct reclaim (look_around unguarded)  froze at the PIN, then ~2 min
+ *   kswapd only (look_around guarded)       froze at the lock screen after boot
+ *   no walks at all                          five hours of uptime
+ *
+ * The guard on lru_gen_look_around() was the wrong lever: the walk that hurts
+ * is walk_mm()/walk_pmd_range(), the ageing walk that scans every process's
+ * page tables from kswapd. look_around only promotes during eviction and
+ * disabling it changed nothing.
+ *
+ * What replaces the walk is a floor on ageing (lru_gen_min_ttl = HZ), so pages
+ * stay in the youngest generation for at least a second instead of aging out
+ * and being evicted immediately.
+ *
+ * The walk is still switchable at runtime, for testing only:
+ *   cat /sys/kernel/mm/lru_gen/enabled       -> 0x0001
+ *   echo 7 > /sys/kernel/mm/lru_gen/enabled  -> add the walks back
+ */
+static int __init lru_gen_core_only_init(void)
+{
+	static_branch_disable(&lru_gen_caps[LRU_GEN_MM_WALK]);
+	static_branch_disable(&lru_gen_caps[LRU_GEN_NONLEAF_YOUNG]);
+	return 0;
+}
+early_initcall(lru_gen_core_only_init);
+
 
 /******************************************************************************
  *                          shorthand helpers
@@ -4119,7 +4150,22 @@ static bool age_lruvec(struct lruvec *lruvec, struct scan_control *sc, unsigned 
 }
 
 /* to protect the working set of the last N jiffies */
-static unsigned long lru_gen_min_ttl __read_mostly;
+/*
+ * One second, not zero.
+ *
+ * lru_gen_age_node() skips ageing while the oldest generation is younger than
+ * this, so it is the only throttle MGLRU has on how fast a page travels from
+ * "just faulted in" to "candidate for eviction". Upstream defaults to 0, which
+ * is fine when the page-table walks exist: they promote hot pages before it
+ * matters. On this phone the walks cannot be used - the direct-reclaim form
+ * froze it at the PIN and the kswapd form froze it at the lock screen - so
+ * without a floor every page ages out immediately, gets evicted and is faulted
+ * straight back: measured at ~380/s idle and ~6,000/s while using Facebook or
+ * TikTok, with MemAvailable down to 1.7 GB of 11.4 GB.
+ *
+ * Still tunable at runtime: /sys/kernel/mm/lru_gen/min_ttl_ms.
+ */
+static unsigned long lru_gen_min_ttl __read_mostly = HZ;
 
 static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 {
