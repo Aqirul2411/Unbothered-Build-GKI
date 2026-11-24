@@ -2720,6 +2720,35 @@ DEFINE_STATIC_KEY_ARRAY_FALSE(lru_gen_caps, NR_LRU_GEN_CAPS);
 #define get_cap(cap)	static_branch_unlikely(&lru_gen_caps[cap])
 #endif
 
+/*
+ * Boot with the core only, not with every capability.
+ *
+ * CONFIG_LRU_GEN_ENABLED turns all of them on, including LRU_GEN_MM_WALK -
+ * the page-table walk that reads other processes' PTEs during reclaim. That is
+ * the one capability this phone has never survived: with walks on, MGLRU froze
+ * it fifteen seconds after the PIN on the 2022 backport, and inside two minutes
+ * on this newer generation, with load average 1.8 and zero blocked tasks right
+ * up to the last sample. With walks off the same code ran for hours.
+ *
+ * So the default here is the configuration with evidence behind it, and the
+ * walk stays available for testing:
+ *
+ *   cat /sys/kernel/mm/lru_gen/enabled    -> 0x0001
+ *   echo 7 > /sys/kernel/mm/lru_gen/enabled   -> adds the walk back
+ *   echo 1 > /sys/kernel/mm/lru_gen/enabled   -> back to core only
+ *
+ * This is a deliberate deviation from upstream's default and it is written
+ * down in configs/tuning.fragment as well, because a silent difference between
+ * this kernel and the documentation is how the last five evenings went.
+ */
+static int __init lru_gen_core_only_init(void)
+{
+	static_branch_disable(&lru_gen_caps[LRU_GEN_MM_WALK]);
+	static_branch_disable(&lru_gen_caps[LRU_GEN_NONLEAF_YOUNG]);
+	return 0;
+}
+early_initcall(lru_gen_core_only_init);
+
 /******************************************************************************
  *                          shorthand helpers
  ******************************************************************************/
