@@ -2720,36 +2720,6 @@ DEFINE_STATIC_KEY_ARRAY_FALSE(lru_gen_caps, NR_LRU_GEN_CAPS);
 #define get_cap(cap)	static_branch_unlikely(&lru_gen_caps[cap])
 #endif
 
-/*
- * Boot with the core only: the page-table walks stay off.
- *
- * They are the one capability this phone cannot survive, in every form that has
- * been tried:
- *
- *   direct reclaim (look_around unguarded)  froze at the PIN, then ~2 min
- *   kswapd only (look_around guarded)       froze at the lock screen after boot
- *   no walks at all                          five hours of uptime
- *
- * The guard on lru_gen_look_around() was the wrong lever: the walk that hurts
- * is walk_mm()/walk_pmd_range(), the ageing walk that scans every process's
- * page tables from kswapd. look_around only promotes during eviction and
- * disabling it changed nothing.
- *
- * What replaces the walk is a floor on ageing (lru_gen_min_ttl = HZ), so pages
- * stay in the youngest generation for at least a second instead of aging out
- * and being evicted immediately.
- *
- * The walk is still switchable at runtime, for testing only:
- *   cat /sys/kernel/mm/lru_gen/enabled       -> 0x0001
- *   echo 7 > /sys/kernel/mm/lru_gen/enabled  -> add the walks back
- */
-static int __init lru_gen_core_only_init(void)
-{
-	static_branch_disable(&lru_gen_caps[LRU_GEN_MM_WALK]);
-	static_branch_disable(&lru_gen_caps[LRU_GEN_NONLEAF_YOUNG]);
-	return 0;
-}
-early_initcall(lru_gen_core_only_init);
 
 
 /******************************************************************************
@@ -4260,31 +4230,6 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	/* avoid taking the LRU lock under the PTL when possible */
 	walk = current->reclaim_state ? current->reclaim_state->mm_walk : NULL;
 
-	/*
-	 * Promote only from kswapd's reclaim walk.
-	 *
-	 * Two things are true about this function on this phone, and both are
-	 * answered by the same two lines:
-	 *
-	 * 1. Without a reclaim walk attached, it takes pgdat->lru_lock while the
-	 *    PTE lock is held (see the two paths below), which is the PTL -> LRU
-	 *    order its own comment says to avoid. kswapd always has a walk, so
-	 *    refusing the no-walk case removes that inversion entirely.
-	 *
-	 * 2. In direct reclaim it walks page tables inside a task that is blocked
-	 *    waiting for its own page - the PIN-and-open-an-app case that froze
-	 *    this phone. kswapd has the luxury of time; a faulting app does not.
-	 *
-	 * What is given up: promotion during direct reclaim. What is kept: ageing,
-	 * walks and promotion in kswapd, which is where pages actually get old.
-	 * Without this the phone cannot have the walk at all (it freezes), and
-	 * without the walk MGLRU evicts hot pages and re-faults them, which is the
-	 * thrash being fixed here.
-	 */
-	if (!walk)
-		return;
-	if (!current_is_kswapd())
-		return;
 
 	start = max(pvmw->address & PMD_MASK, pvmw->vma->vm_start);
 	end = min(pvmw->address | ~PMD_MASK, pvmw->vma->vm_end - 1) + 1;
